@@ -1,0 +1,152 @@
+
+<!DOCTYPE html>
+<html>
+
+  <head>
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>How to Build a Simple To-Do List with PHP AJAX EC2 S3 RDS - By Fabian Baier</title>
+
+  <meta name="description" content="To-do lists are a great way to keep track of your daily tasks. In this tutorial we will build our own to-do list using PHP, MySQL, and AJAX. This tutorial as...">
+
+  <link rel="stylesheet" href="http://mlitzinger.com/css/style.css">
+  <link rel="canonical" href="http://mlitzinger.com/articles/simple-to-do-list/">
+  <link rel="alternate" type="application/rss+xml" title="Matt Litzinger" href="http://mlitzinger.com/feed.xml" />
+</head>
+<body>
+    <div class="main" role="main">
+      <header class="page-header">
+        <div class="wrap">
+
+
+
+            <h1>How to Build a Simple To-Do List with EC2, S3 and RDS</h1>
+
+
+
+              <div class="post-date">
+                <time datetime=""> Published on Jun 18, 2016 by Fabian Baier</time>
+              </div>
+
+
+
+
+
+        </div>
+      </header>
+
+      <article>
+        <div class="wrap">
+
+          <p>To-do lists are a great way to keep track of your daily tasks. In this tutorial we will build our own to-do list using PHP, MySQL, and AJAX. This tutorial assumes that you have a basic understanding of HTML, PHP, MySQL, and JavaScript.</p>
+
+<p>We will be using the following files throughout this tutorial. You can download them using the link below. Feel free to use an alternative structure, but remember to change your file paths from those in the example code.</p>
+
+<p><a href="http://54.183.198.130/ctu" target="_blank">View Demo</a>    <a href="https://github.com/mattlitzinger/Simple_AJAX_Todo_List/archive/master.zip" target="_blank">Download Files</a></p>
+
+<h2 id="main-index-file">1) Install EC2 Instance & phpMyadmin</h2>
+
+<p>The first thing we need to do is install the ec2 instance. (<em>Ubuntu Server 14.04 LTS (HVM), SSD Volume Type - ami-06116566</em>). Connect to the instance and install and configure phpmyadmin with your username + password.</p>
+
+<pre><code>ubuntu@ip-172-31-13-240:~/ctu$ sudo apt-get install phpmyadmin
+</code></pre>
+
+
+<h2 id="main-index-file">2) Install RDS</h2>
+
+<p>Install the MySQL server for your instance, but make sure you select the free Dev/Test version. (<em>MySQL Dev/Test</em>). Make sure your RDS is in the same security group like your EC2 instance and check Public Accessible with "yes".</p>
+
+<h2 id="main-index-file">3) Configure phpMyadmin</h2>
+
+<p>Configure phpMyadmin so it will connect to your RDS and not to a local mysql server. Make sure you fill in your RDS_DETAILS.</p>
+<pre><code>ubuntu@ip-172-31-13-240:~/ctu$ sudo nano /etc/phpmyadmin/config.inc.php
+
+
+--ADD LINES BELOW THE PMA CONFIG AREA AND FILL IN DETAILS--
+$i++;
+$cfg['Servers'][$i]['host']          = '__FILL_IN_RDS_DETAILS__';
+$cfg['Servers'][$i]['port']          = '3306';
+$cfg['Servers'][$i]['socket']        = '';
+$cfg['Servers'][$i]['connect_type']  = 'tcp';
+$cfg['Servers'][$i]['extension']     = 'mysql';
+$cfg['Servers'][$i]['compress']      = FALSE;
+$cfg['Servers'][$i]['auth_type']     = 'config';
+$cfg['Servers'][$i]['user']          = '__FILL_IN_RDS_DETAILS__';
+$cfg['Servers'][$i]['password']      = '__FILL_IN_RDS_DETAILS__';
+
+</code></pre>
+<p><em><span style="text-decoration: underline;">Note</span>: Access your phpmyadmin through http://YOUREC2IP/phpmyadmin and connect to your RDS database with your username + password from step 1.</em></p>
+<h2 id="main-index-file">4) Making sure the security group is correct</h2>
+
+<p>Make sure your Security Group allows MySQL ports and the HTTP port and your InBound rules looks like mine:</p>
+<p><img src="https://s3-us-west-1.amazonaws.com/ctubucket/securitygroup.jpg"></img></p>
+
+<h2 id="connecting-to-the-mysql-database">5) Creating MySQL Database table</h2>
+
+<p>Next we need to create the right table in your database for storing our to-do items. The easiest way to do this is trough a server-side tool called <a href="http://www.phpmyadmin.net/" target="_blank">phpMyAdmin</a>. We will be setting up one table with the name of ‘tasks’ and the following columns in this order: ‘id’, ‘task’, ‘date’, ‘time’. Be sure to set the id column to auto-increment (there should be a checkbox labeled ‘A_I’).</p>
+
+<p><img src="http://mlitzinger.com/assets/images/phpMyAdmin_screenshot.jpg" alt="phpMyAdmin Screenshot" /></p>
+<p>The easiest way to do this is by inserting the the content from task_list.sql directly through phpMyadmin to your RDSDATABASE by clicking on your RDS created database and then SQL and type in:</p>
+<pre><code>-- phpMyAdmin SQL Dump
+-- version 4.1.12
+-- http://www.phpmyadmin.net
+--
+-- Host: localhost:3306
+-- Generation Time: Oct 28, 2014 at 04:39 PM
+-- Server version: 5.5.34
+-- PHP Version: 5.5.10
+
+SET SQL_MODE = "NO_AUTO_VALUE_ON_ZERO";
+SET time_zone = "+00:00";
+
+--
+-- Database: `simple_task_list_tutorial`
+--
+
+-- --------------------------------------------------------
+
+--
+-- Table structure for table `tasks`
+--
+
+CREATE TABLE `tasks` (
+  `id` int(11) NOT NULL AUTO_INCREMENT,
+  `task` text NOT NULL,
+  `date` date NOT NULL,
+  `time` time NOT NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB  DEFAULT CHARSET=latin1 AUTO_INCREMENT=4 ;
+
+--
+-- Dumping data for table `tasks`
+--
+
+INSERT INTO `tasks` (`id`, `task`, `date`, `time`) VALUES
+(2, 'Build to-do list app', '2014-10-23', '04:02:31'),
+(3, 'Add to-do items', '2014-10-28', '16:21:12');
+</code></pre>
+
+<h2 id="main-index-file">6) Install the project code</h2>
+<p>If you haven't done yet copy the content of the Simple AJAX Todo List in your <em>/var/www/html</em> folder: <a href="https://github.com/mattlitzinger/Simple_AJAX_Todo_List/archive/master.zip" target="_blank">Download Files</a></p>
+
+<p>Open <em>connect.php</em> in your <em>/var/www/html</em> folder and add the following code to the file. Be sure to substitute your database details for the ‘username’, ‘password’, and ‘database_name’ fields. Save the file when you are done.</p>
+
+<pre><code>&lt;?php
+    $server = "RDSENDPOINT";
+    $db_user = "RDSUSERNAME";
+    $db_pass = "RDSPASSWORD";
+    $db_name = "RDSDATABASE";
+
+    mysql_connect($server, $db_user, $db_pass) or die("Could not connect to server!");
+    mysql_select_db($db_name) or die("Could not connect to database!");
+?&gt;
+</code></pre>
+
+<h2 id="main-index-file">7) Done</h2>
+
+<p>If you have followed those steps correctly you should be able to connect to your EC2 public ip via webbrowser and see your todo list! </p>
+
+</body>
+</html>
